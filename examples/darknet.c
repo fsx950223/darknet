@@ -1,5 +1,4 @@
 #include "darknet.h"
-
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,6 +7,7 @@ extern void predict_classifier(char *datacfg, char *cfgfile, char *weightfile, c
 extern void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen);
 extern void run_yolo(int argc, char **argv);
 extern void run_detector(int argc, char **argv);
+extern void run_server();
 extern void run_coco(int argc, char **argv);
 extern void run_nightmare(int argc, char **argv);
 extern void run_classifier(int argc, char **argv);
@@ -418,7 +418,6 @@ int main(int argc, char **argv)
         cuda_set_device(gpu_index);
     }
 #endif
-
     if (0 == strcmp(argv[1], "average")){
         average(argc, argv);
     } else if (0 == strcmp(argv[1], "yolo")){
@@ -427,6 +426,8 @@ int main(int argc, char **argv)
         run_super(argc, argv);
     } else if (0 == strcmp(argv[1], "lsd")){
         run_lsd(argc, argv);
+    } else if (0 == strcmp(argv[1], "server")){
+        run_server();
     } else if (0 == strcmp(argv[1], "detector")){
         run_detector(argc, argv);
     } else if (0 == strcmp(argv[1], "detect")){
