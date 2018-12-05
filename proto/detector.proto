@@ -15,9 +15,9 @@
 syntax = "proto3";
 
 option java_multiple_files = true;
-option java_package = "io.grpc.examples.helloworld";
-option java_outer_classname = "HelloWorldProto";
-option objc_class_prefix = "HLW";
+option java_package = "io.grpc.chenyun.detector";
+option java_outer_classname = "Detector";
+option objc_class_prefix = "chenyun";
 
 package detector;
 
@@ -25,12 +25,10 @@ package detector;
 service Detector {
   // Sends a greeting
   rpc Predict (DetectorRequest) returns (DetectorReply) {}
-  //rpc SayHelloAgain (DetectorRequest) returns (DetectorReply) {}
 }
-
 // The request message containing the user's name.
 message DetectorRequest {
-  string filename = 1;
+  string file = 1;
   float thresh=2;
   float hier_thresh=3;
 }
