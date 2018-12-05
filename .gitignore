@@ -5,6 +5,9 @@
 *.png
 *.jpg
 *.pyc
+.vscode
+.idea
+backup/
 old/
 mnist/
 data/
@@ -18,7 +21,9 @@ submission/
 cfg/
 darknet
 .fuse*
-
+proto/*.cc
+proto/*.h
+chenyun
 # OS Generated #
 .DS_Store*
 ehthumbs.db
