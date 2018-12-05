@@ -14,12 +14,14 @@ using grpc::Status;
 using detector::DetectorRequest;
 using detector::DetectorReply;
 using detector::Detector;
+network *net=nullptr;
+char **names=nullptr;
 //using boost::any_cast;
 //typedef boost::variant<int, std::string,float> Value;
 void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,DetectorReply* reply)
 {
     int i,j;
-
+    float rate;
     for(i = 0; i < num; ++i){
         //识别对象的名称
         char labelstr[4096] = {0};
@@ -34,6 +36,7 @@ void detection_json(image im, detection *dets, int num, float thresh, char **nam
                     strcat(labelstr, names[j]);
                 }
                 printf("%s: %.0f%%\n", names[j], dets[i].prob[j]*100);
+                rate=dets[i].prob[j]*100;
             }
         }
         if(clazz >= 0){
@@ -48,81 +51,68 @@ void detection_json(image im, detection *dets, int num, float thresh, char **nam
             if(right > im.w-1) right = im.w-1;
             if(top < 0) top = 0;
             if(bot > im.h-1) bot = im.h-1;
-            //std::map<std::string,boost::any> result;
+            std::string name;
+            name=labelstr;
             reply->set_bottom(bot);
             reply->set_left(left);
             reply->set_right(right);
             reply->set_top(top);
-            reply->set_name(labelstr);
-            reply->set_rate(dets[i].prob[j]*100);
+            reply->set_name(name);
+            reply->set_rate(rate);
         }
     }
 }
-void predict_detector( char *filename, float thresh, float hier_thresh,DetectorReply* reply)
+void predict_detector( DetectorReply* reply,std::string file, float thresh=.5, float hier_thresh=.5)
 {
-    std::string datacfgStr="cfg/coco.data";
-    std::string cfgfileStr="cfg/yolov3.cfg";
-    std::string weightfileStr="yolov3.weights";
+    srand(2222222);
+    double time;
+    std::string str="/media/fangsixie/data/filebrowser/srv/"+file;
+    int lenOfStr = str.length();
+    char* input = new char[lenOfStr];
+    strcpy(input,str.c_str());
+    float nms=.45;
+    image im = load_image_color(input,0,0);
+    image sized = letterbox_image(im, net->w, net->h);
+    layer l = net->layers[net->n-1];
+    float *X = sized.data;
+    time=what_time_is_it_now();
+    network_predict(net, X);
+    printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
+    int nboxes = 0;
+    detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
+    if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+    detection_json(im, dets, nboxes, thresh, names, l.classes,reply);
+    free_detections(dets, nboxes);
+    free_image(im);
+    free_image(sized);
+}
+// Logic and data behind the server's behavior.
+class DetectorServiceImpl final : public Detector::Service {
+  Status Predict(ServerContext* context, const DetectorRequest* request,
+                  DetectorReply* reply) override {
+    predict_detector(reply,request->file().c_str(),request->thresh(),request->hier_thresh());
+    return Status::OK;
+  }
+};
+
+void run_server(int argc, char **argv) {
+    std::string datacfgStr="chenyun/voc.data";
+    std::string cfgfileStr="chenyun/chenyun.cfg";
+    std::string weightfileStr="chenyun/chenyun.weights";
     char *datacfg = new char[datacfgStr.length() + 1];
     char *cfgfile = new char[cfgfileStr.length() + 1];
     char *weightfile = new char[weightfileStr.length() + 1];
     strcpy(datacfg, datacfgStr.c_str());
     strcpy(cfgfile, cfgfileStr.c_str());
     strcpy(weightfile, weightfileStr.c_str());
+    list *options = read_data_cfg(datacfg);
+    char *name_list = option_find_str(options, "names", "chenyun/obj.names");
+    names = get_labels(name_list);
+    net = load_network(cfgfile, weightfile, 0);
+    set_batch_network(net, 1);
     free(datacfg);
     free(cfgfile);
     free(weightfile);
-    list *options = read_data_cfg(datacfg);
-    char *name_list = option_find_str(options, "names", "data/names.list");
-    char **names = get_labels(name_list);
-    network *net = load_network(cfgfile, weightfile, 0);
-    set_batch_network(net, 1);
-    srand(2222222);
-    double time;
-    char buff[256];
-    char *input = buff;
-    float nms=.45;
-    while(1){
-        if(filename){
-            strncpy(input, filename, 256);
-        } else {
-            printf("Enter Image Path: ");
-            fflush(stdout);
-            input = fgets(input, 256, stdin);
-            if(!input) return;
-            strtok(input, "\n");
-        }
-        image im = load_image_color(input,0,0);
-        image sized = letterbox_image(im, net->w, net->h);
-        layer l = net->layers[net->n-1];
-        float *X = sized.data;
-        time=what_time_is_it_now();
-        network_predict(net, X);
-        printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
-        int nboxes = 0;
-        detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
-        if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-        detection_json(im, dets, nboxes, thresh, names, l.classes,reply);
-        free_detections(dets, nboxes);
-        free_image(im);
-        free_image(sized);
-        if (filename) break;
-    }
-}
-// Logic and data behind the server's behavior.
-class DetectorServiceImpl final : public Detector::Service {
-  Status Predict(ServerContext* context, const DetectorRequest* request,
-                  DetectorReply* reply) override {
-    std::string filename=request->filename();
-    char *cstr = new char[filename.length() + 1];
-    predict_detector(strcpy(cstr, filename.c_str()),request->thresh(),request->hier_thresh(),reply);
-    free(cstr);
-    return Status::OK;
-  }
-};
-
-extern "C" void run_server();
-void run_server() {
     std::string server_address("0.0.0.0:50051");
     DetectorServiceImpl service;
 
@@ -141,8 +131,8 @@ void run_server() {
     server->Wait();
 }
 
-// int main(int argc, char** argv) {
-//   run_server();
+int main(int argc, char** argv) {
+  run_server(argc,argv);
 
-//   return 0;
-// }
+  return 0;
+}
