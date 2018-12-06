@@ -2,22 +2,23 @@
 #include <memory>
 #include <string>
 #include <map>
-//#include <boost/any.hpp>
+#include <unistd.h>
 #include <grpcpp/grpcpp.h>
 #include "darknet.h"
 #include "../proto/detector.grpc.pb.h"
-//using namespace std;
+
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
+using grpc::ServerAsyncResponseWriter;
+using grpc::ServerCompletionQueue;
 using detector::DetectorRequest;
 using detector::DetectorReply;
 using detector::Detector;
 network *net=nullptr;
 char **names=nullptr;
-//using boost::any_cast;
-//typedef boost::variant<int, std::string,float> Value;
+
 void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,DetectorReply* reply)
 {
     int i,j;
@@ -62,8 +63,7 @@ void detection_json(image im, detection *dets, int num, float thresh, char **nam
         }
     }
 }
-void predict_detector( DetectorReply* reply,std::string file, float thresh=.5, float hier_thresh=.5)
-{
+void predict_detector( DetectorReply* reply,std::string file, float thresh=.5, float hier_thresh=.5){
     srand(2222222);
     double time;
     std::string str="/media/fangsixie/data/filebrowser/srv/"+file;
@@ -71,31 +71,38 @@ void predict_detector( DetectorReply* reply,std::string file, float thresh=.5, f
     char* input = new char[lenOfStr];
     strcpy(input,str.c_str());
     float nms=.45;
-    image im = load_image_color(input,0,0);
-    image sized = letterbox_image(im, net->w, net->h);
-    layer l = net->layers[net->n-1];
-    float *X = sized.data;
-    time=what_time_is_it_now();
-    network_predict(net, X);
-    printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
-    int nboxes = 0;
-    detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
-    if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-    detection_json(im, dets, nboxes, thresh, names, l.classes,reply);
-    free_detections(dets, nboxes);
-    free_image(im);
-    free_image(sized);
+    pid_t pId = fork();
+    if (pId == -1) {
+      perror("fork error");
+    } else if (pId == 0) {
+      image im = load_image_color(input,0,0);
+      image sized = letterbox_image(im, net->w, net->h);
+      layer l = net->layers[net->n-1];
+      float *X = sized.data;
+      time=what_time_is_it_now();
+      network_predict(net, X);
+      printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
+      int nboxes = 0;
+      detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
+      if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+      detection_json(im, dets, nboxes, thresh, names, l.classes,reply);
+      free_detections(dets, nboxes);
+      free_image(im);
+      free_image(sized);
+    }
 }
-// Logic and data behind the server's behavior.
-class DetectorServiceImpl final : public Detector::Service {
-  Status Predict(ServerContext* context, const DetectorRequest* request,
-                  DetectorReply* reply) override {
-    predict_detector(reply,request->file().c_str(),request->thresh(),request->hier_thresh());
-    return Status::OK;
-  }
-};
 
-void run_server(int argc, char **argv) {
+class ServerImpl final {
+ public:
+  ~ServerImpl() {
+    server_->Shutdown();
+    // Always shutdown the completion queue after the server.
+    cq_->Shutdown();
+  }
+
+  // There is no shutdown handling in this code.
+  void Run(int argc, char** argv) {
+    std::string server_address("0.0.0.0:50051");
     std::string datacfgStr="chenyun/voc.data";
     std::string cfgfileStr="chenyun/chenyun.cfg";
     std::string weightfileStr="chenyun/chenyun.weights";
@@ -110,29 +117,118 @@ void run_server(int argc, char **argv) {
     names = get_labels(name_list);
     net = load_network(cfgfile, weightfile, 0);
     set_batch_network(net, 1);
-    free(datacfg);
-    free(cfgfile);
-    free(weightfile);
-    std::string server_address("0.0.0.0:50051");
-    DetectorServiceImpl service;
-
     ServerBuilder builder;
     // Listen on the given address without any authentication mechanism.
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    // Register "service" as the instance through which we'll communicate with
-    // clients. In this case it corresponds to an *synchronous* service.
-    builder.RegisterService(&service);
+    // Register "service_" as the instance through which we'll communicate with
+    // clients. In this case it corresponds to an *asynchronous* service.
+    builder.RegisterService(&service_);
+    // Get hold of the completion queue used for the asynchronous communication
+    // with the gRPC runtime.
+    cq_ = builder.AddCompletionQueue();
     // Finally assemble the server.
-    std::unique_ptr<Server> server(builder.BuildAndStart());
+    server_ = builder.BuildAndStart();
     std::cout << "Server listening on " << server_address << std::endl;
 
-    // Wait for the server to shutdown. Note that some other thread must be
-    // responsible for shutting down the server for this call to ever return.
-    server->Wait();
-}
+    // Proceed to the server's main loop.
+    HandleRpcs();
+  }
+
+ private:
+  // Class encompasing the state and logic needed to serve a request.
+  class CallData {
+   public:
+    // Take in the "service" instance (in this case representing an asynchronous
+    // server) and the completion queue "cq" used for asynchronous communication
+    // with the gRPC runtime.
+    CallData(Detector::AsyncService* service, ServerCompletionQueue* cq)
+        : service_(service), cq_(cq), responder_(&ctx_), status_(CREATE) {
+      // Invoke the serving logic right away.
+      Proceed();
+    }
+
+    void Proceed() {
+      if (status_ == CREATE) {
+        // Make this instance progress to the PROCESS state.
+        status_ = PROCESS;
+
+        // As part of the initial CREATE state, we *request* that the system
+        // start processing SayHello requests. In this request, "this" acts are
+        // the tag uniquely identifying the request (so that different CallData
+        // instances can serve different requests concurrently), in this case
+        // the memory address of this CallData instance.
+        service_->RequestPredict(&ctx_, &request_, &responder_, cq_, cq_,
+                                  this);
+      } else if (status_ == PROCESS) {
+        // Spawn a new CallData instance to serve new clients while we process
+        // the one for this CallData. The instance will deallocate itself as
+        // part of its FINISH state.
+        new CallData(service_, cq_);
+
+        // The actual processing.
+        predict_detector(&reply_,request_.file(),request_.thresh(),request_.hier_thresh());
+        // And we are done! Let the gRPC runtime know we've finished, using the
+        // memory address of this instance as the uniquely identifying tag for
+        // the event.
+        status_ = FINISH;
+        responder_.Finish(reply_, Status::OK, this);
+      } else {
+        GPR_ASSERT(status_ == FINISH);
+        // Once in the FINISH state, deallocate ourselves (CallData).
+        delete this;
+      }
+    }
+
+   private:
+    // The means of communication with the gRPC runtime for an asynchronous
+    // server.
+    Detector::AsyncService* service_;
+    // The producer-consumer queue where for asynchronous server notifications.
+    ServerCompletionQueue* cq_;
+    // Context for the rpc, allowing to tweak aspects of it such as the use
+    // of compression, authentication, as well as to send metadata back to the
+    // client.
+    ServerContext ctx_;
+    // What we get from the client.
+    DetectorRequest request_;
+    // What we send back to the client.
+    DetectorReply reply_;
+
+    // The means to get back to the client.
+    ServerAsyncResponseWriter<DetectorReply> responder_;
+
+    // Let's implement a tiny state machine with the following states.
+    enum CallStatus { CREATE, PROCESS, FINISH };
+    CallStatus status_;  // The current serving state.
+  };
+
+  // This can be run in multiple threads if needed.
+  void HandleRpcs() {
+    // Spawn a new CallData instance to serve new clients.
+    new CallData(&service_, cq_.get());
+    void* tag;  // uniquely identifies a request.
+    bool ok;
+    while (true) {
+      // Block waiting to read the next event from the completion queue. The
+      // event is uniquely identified by its tag, which in this case is the
+      // memory address of a CallData instance.
+      // The return value of Next should always be checked. This return value
+      // tells us whether there is any kind of event or cq_ is shutting down.
+      GPR_ASSERT(cq_->Next(&tag, &ok));
+      GPR_ASSERT(ok);
+      static_cast<CallData*>(tag)->Proceed();
+    }
+  }
+
+  std::unique_ptr<ServerCompletionQueue> cq_;
+  Detector::AsyncService service_;
+  std::unique_ptr<Server> server_;
+};
+
+
 
 int main(int argc, char** argv) {
-  run_server(argc,argv);
-
+  ServerImpl server;
+  server.Run(argc,argv);
   return 0;
 }
