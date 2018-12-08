@@ -6,6 +6,7 @@
 #include <grpcpp/grpcpp.h>
 #include "darknet.h"
 #include "../proto/detector.grpc.pb.h"
+#include "yaml-cpp/yaml.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -18,7 +19,7 @@ using detector::DetectorReply;
 using detector::Detector;
 network *net=nullptr;
 char **names=nullptr;
-
+std::string srv="/usr/local/srv/";
 void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,DetectorReply* reply)
 {
     int i,j;
@@ -66,30 +67,29 @@ void detection_json(image im, detection *dets, int num, float thresh, char **nam
 void predict_detector( DetectorReply* reply,std::string file, float thresh=.5, float hier_thresh=.5){
     srand(2222222);
     double time;
-    std::string str="/media/fangsixie/data/filebrowser/srv/"+file;
+    std::string str=srv+file;
     int lenOfStr = str.length();
     char* input = new char[lenOfStr];
     strcpy(input,str.c_str());
     float nms=.45;
-    pid_t pId = fork();
-    if (pId == -1) {
-      perror("fork error");
-    } else if (pId == 0) {
-      image im = load_image_color(input,0,0);
-      image sized = letterbox_image(im, net->w, net->h);
-      layer l = net->layers[net->n-1];
-      float *X = sized.data;
-      time=what_time_is_it_now();
-      network_predict(net, X);
-      printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
-      int nboxes = 0;
-      detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
-      if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-      detection_json(im, dets, nboxes, thresh, names, l.classes,reply);
-      free_detections(dets, nboxes);
-      free_image(im);
-      free_image(sized);
+    if(access(input,0)){
+      puts("Cannot load image");
+      return;
     }
+    image im = load_image_color(input,0,0);
+    image sized = letterbox_image(im, net->w, net->h);
+    layer l = net->layers[net->n-1];
+    float *X = sized.data;
+    time=what_time_is_it_now();
+    network_predict(net, X);
+    printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
+    int nboxes = 0;
+    detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
+    if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+    detection_json(im, dets, nboxes, thresh, names, l.classes,reply);
+    free_detections(dets, nboxes);
+    free_image(im);
+    free_image(sized);
 }
 
 class ServerImpl final {
