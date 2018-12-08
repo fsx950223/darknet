@@ -20,12 +20,11 @@ using detector::Detector;
 network *net=nullptr;
 char **names=nullptr;
 std::string srv="/usr/local/srv/";
-void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,DetectorReply* reply)
+void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,ServerAsyncResponseWriter<DetectorReply>* writer)
 {
     int i,j;
     float rate;
     for(i = 0; i < num; ++i){
-        //识别对象的名称
         char labelstr[4096] = {0};
         int clazz = -1;
         for(j = 0; j < classes; ++j){
@@ -42,8 +41,8 @@ void detection_json(image im, detection *dets, int num, float thresh, char **nam
             }
         }
         if(clazz >= 0){
+            
             box b = dets[i].bbox;
-            //获取选框坐标以及宽高
             int left  = (b.x-b.w/2.)*im.w;
             int right = (b.x+b.w/2.)*im.w;
             int top   = (b.y-b.h/2.)*im.h;
@@ -53,18 +52,19 @@ void detection_json(image im, detection *dets, int num, float thresh, char **nam
             if(right > im.w-1) right = im.w-1;
             if(top < 0) top = 0;
             if(bot > im.h-1) bot = im.h-1;
-            std::string name;
-            name=labelstr;
+            DetectorReply* reply;
+            std::string name=labelstr;
             reply->set_bottom(bot);
             reply->set_left(left);
             reply->set_right(right);
             reply->set_top(top);
             reply->set_name(name);
             reply->set_rate(rate);
+            writer->Write(reply);
         }
     }
 }
-void predict_detector( DetectorReply* reply,std::string file, float thresh=.5, float hier_thresh=.5){
+void predict_detector( ServerAsyncResponseWriter<DetectorReply>* writer,std::string file, float thresh=.5, float hier_thresh=.5){
     srand(2222222);
     double time;
     std::string str=srv+file;
@@ -86,7 +86,7 @@ void predict_detector( DetectorReply* reply,std::string file, float thresh=.5, f
     int nboxes = 0;
     detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
     if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-    detection_json(im, dets, nboxes, thresh, names, l.classes,reply);
+    detection_json(im, dets, nboxes, thresh, names, l.classes,writer);
     free_detections(dets, nboxes);
     free_image(im);
     free_image(sized);
@@ -166,12 +166,12 @@ class ServerImpl final {
         new CallData(service_, cq_);
 
         // The actual processing.
-        predict_detector(&reply_,request_.file(),request_.thresh(),request_.hier_thresh());
+        predict_detector(&responder_,request_.file(),request_.thresh(),request_.hier_thresh());
         // And we are done! Let the gRPC runtime know we've finished, using the
         // memory address of this instance as the uniquely identifying tag for
         // the event.
         status_ = FINISH;
-        responder_.Finish(reply_, Status::OK, this);
+        responder_.Finish(responder_, Status::OK, this);
       } else {
         GPR_ASSERT(status_ == FINISH);
         // Once in the FINISH state, deallocate ourselves (CallData).
@@ -181,7 +181,7 @@ class ServerImpl final {
 
    private:
     // The means of communication with the gRPC runtime for an asynchronous
-    // server.
+    // server.                                                                                                                                                                                                                                                                                                                                                                                                                                    
     Detector::AsyncService* service_;
     // The producer-consumer queue where for asynchronous server notifications.
     ServerCompletionQueue* cq_;
@@ -192,14 +192,14 @@ class ServerImpl final {
     // What we get from the client.
     DetectorRequest request_;
     // What we send back to the client.
-    DetectorReply reply_;
+    // DetectorReply reply_;
 
     // The means to get back to the client.
     ServerAsyncResponseWriter<DetectorReply> responder_;
 
     // Let's implement a tiny state machine with the following states.
     enum CallStatus { CREATE, PROCESS, FINISH };
-    CallStatus status_;  // The current serving state.
+    CallStatus status_;  // The current serving state.                                                                                
   };
 
   // This can be run in multiple threads if needed.

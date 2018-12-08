@@ -24,7 +24,7 @@ package detector;
 // The greeting service definition.
 service Detector {
   // Sends a greeting
-  rpc Predict (DetectorRequest) returns (DetectorReply) {}
+  rpc Predict (DetectorRequest) returns (stream DetectorReply) {}
 }
 // The request message containing the user's name.
 message DetectorRequest {
