@@ -20,7 +20,7 @@ using detector::Detector;
 network *net=nullptr;
 char **names=nullptr;
 std::string srv="/usr/local/srv/";
-void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,ServerAsyncResponseWriter<DetectorReply>* writer)
+void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,ServerAsyncWriter<DetectorReply>* writer)
 {
     int i,j;
     float rate;
@@ -64,7 +64,7 @@ void detection_json(image im, detection *dets, int num, float thresh, char **nam
         }
     }
 }
-void predict_detector( ServerAsyncResponseWriter<DetectorReply>* writer,std::string file, float thresh=.5, float hier_thresh=.5){
+void predict_detector( ServerAsyncWriter<DetectorReply>* writer,std::string file, float thresh=.5, float hier_thresh=.5){
     srand(2222222);
     double time;
     std::string str=srv+file;
@@ -189,6 +189,7 @@ class ServerImpl final {
     // of compression, authentication, as well as to send metadata back to the
     // client.
     ServerContext ctx_;
+    // ServerWriter<DetectorReply> writer_;
     // What we get from the client.
     DetectorRequest request_;
     // What we send back to the client.
