@@ -24,21 +24,36 @@ package detector;
 // The greeting service definition.
 service Detector {
   // Sends a greeting
-  rpc Predict (DetectorRequest) returns (stream DetectorReply) {}
+  rpc PredictImage (ImageRequest) returns (stream PredictImageReply) {}
+  rpc PredictVideo (VideoRequest) returns (stream PredictVideoReply) {}
+  rpc PredictStream (stream StreamRequest) returns (stream PredictStreamReply) {}
+  rpc BugImageReport (ImageRequest) returns (BugImageReply) {}
 }
 // The request message containing the user's name.
-message DetectorRequest {
+message ImageRequest {
   string file = 1;
   float thresh=2;
   float hier_thresh=3;
 }
-
+message VideoRequest {
+  string file = 1;
+  float thresh=2;
+  float hier_thresh=3;
+}
+message StreamRequest {
+}
 // The response message containing the greetings
-message DetectorReply {
+message PredictImageReply {
   string name = 1;
   int32 top = 2;
   int32 left = 3;
   int32 right = 4;
   int32 bottom = 5;
   float rate= 6;
+}
+message PredictVideoReply {
+}
+message PredictStreamReply {
+}
+message BugImageReply {
 }

@@ -18,6 +18,11 @@ SLIB=libdarknet.so
 ALIB=libdarknet.a
 EXEC=darknet
 OBJDIR=./obj/
+PROTOC=protoc
+GRPC_CPP_PLUGIN = grpc_cpp_plugin
+GRPC_CPP_PLUGIN_PATH ?= `which $(GRPC_CPP_PLUGIN)`
+SERVER=server
+PROTOS_PATH=./proto/
 
 CC=gcc
 CPP=g++
@@ -71,14 +76,16 @@ endif
 EXECOBJ = $(addprefix $(OBJDIR), $(EXECOBJA))
 EXECOBJ2 = $(addprefix $(OBJDIR), $(EXECOBJA2))
 OBJS = $(addprefix $(OBJDIR), $(OBJ))
-DEPS = $(wildcard src/*.h) Makefile include/darknet.h proto/detector.grpc.pb.h proto/detector.pb.h
+DEPS = $(wildcard src/*.h proto/*.h) Makefile include/darknet.h
 
-all: obj backup results $(SLIB) $(ALIB) $(EXEC) server
+all: obj backup results $(SLIB) $(ALIB) $(EXEC) $(SERVER)
 
 $(EXEC): $(EXECOBJ) $(ALIB)
 	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB)
-server: $(EXECOBJ2) $(ALIB)
+
+$(SERVER): $(EXECOBJ2) $(ALIB)
 	$(CPP) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB)
+
 $(ALIB): $(OBJS)
 	$(AR) $(ARFLAGS) $@ $^
 
@@ -97,6 +104,14 @@ $(OBJDIR)%.o: %.c $(DEPS)
 $(OBJDIR)%.o: %.cu $(DEPS)
 	$(NVCC) $(ARCH) $(COMMON) --compiler-options "$(CFLAGS)" -c $< -o $@
 
+# .PRECIOUS: %.grpc.pb.cc
+# %.grpc.pb.cc: %.proto
+# 	$(PROTOC) -I $(PROTOS_PATH) --grpc_out=$(PROTOS_PATH) --plugin=protoc-gen-grpc=$(GRPC_CPP_PLUGIN_PATH) $<
+
+# .PRECIOUS: %.pb.cc
+# %.pb.cc: %.proto
+# 	$(PROTOC) -I $(PROTOS_PATH) --cpp_out=$(PROTOS_PATH) $<
+
 obj:
 	mkdir -p obj
 backup:
@@ -107,5 +122,5 @@ results:
 .PHONY: clean
 
 clean:
-	rm -rf $(OBJS) $(SLIB) $(ALIB) $(EXEC) $(EXECOBJ) $(OBJDIR)/*
+	rm -rf $(OBJS) $(SLIB) $(ALIB) $(EXEC) $(EXECOBJ) $(OBJDIR)/* $(PROTOS_PATH)/*.pb.[cc,h]
 
