@@ -101,11 +101,13 @@ class ServerImpl final : public Detector::Service {
   Status Predict(ServerContext* context,
                       const detector::DetectorRequest* request,
                       ServerWriter<DetectorReply>* writer) override {
+                          
     if(context->client_metadata().find("x-custom-auth-token")->first!="detector-grpc-token"){
         return Status::CANCELLED;
-    };
-    predict_detector(writer,request->file(),request->thresh(),request->hier_thresh());
-    return Status::OK;
+    }else{
+        predict_detector(writer,request->file(),request->thresh(),request->hier_thresh());
+        return Status::OK;
+    }
   }
 };
 
