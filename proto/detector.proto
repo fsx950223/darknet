@@ -31,6 +31,7 @@ message DetectorRequest {
   string file = 1;
   float thresh=2;
   float hier_thresh=3;
+  string token=4;
 }
 
 // The response message containing the greetings

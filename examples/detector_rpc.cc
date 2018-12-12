@@ -23,6 +23,7 @@ network *net=nullptr;
 char **names=nullptr;
 std::string srv="/usr/local/srv/";
 
+
 void detection_json(image im, detection *dets, int num, float thresh, char **names, int classes,ServerWriter<DetectorReply>* writer)
 {
     int i,j;
@@ -101,18 +102,24 @@ class ServerImpl final : public Detector::Service {
   Status Predict(ServerContext* context,
                       const detector::DetectorRequest* request,
                       ServerWriter<DetectorReply>* writer) override {
-                          
-    if(context->client_metadata().find("x-custom-auth-token")->first!="detector-grpc-token"){
-        return Status::CANCELLED;
-    }else{
+    try{
+        if(request->token()!="detector-grpc-token"){
+            std::cout << "predict: token error" << std::endl;
+            return Status::CANCELLED;
+        }
         predict_detector(writer,request->file(),request->thresh(),request->hier_thresh());
         return Status::OK;
+    }catch(std::exception& e){
+        std::cout << "predict:"<<e.what() << std::endl;
+        return Status::CANCELLED;
     }
   }
 };
 
 
 void RunServer(int argc, char** argv) {
+    std::ofstream outf("out.log"); 
+    std::cout.rdbuf(outf.rdbuf()); 
     std::string server_address("0.0.0.0:50051");
     YAML::Node config = YAML::LoadFile("chenyun/config.yaml");
     std::string datacfgStr=config["data"].as<std::string>();
@@ -131,16 +138,11 @@ void RunServer(int argc, char** argv) {
     net = load_network(cfgfile, weightfile, 0);
     set_batch_network(net, 1);
     ServerBuilder builder;
-    // Listen on the given address without any authentication mechanism.
-    //builder.AddListeningPort(server_address, grpc::SslServerCredentials(grpc::SslServerCredentialsOptions()));
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     // Register "service_" as the instance through which we'll communicate with
     // clients. In this case it corresponds to an *asynchronous* service.
     ServerImpl service_;
     builder.RegisterService(&service_);
-    // Get hold of the completion queue used for the asynchronous communication
-    // with the gRPC runtime.
-    //cq_ = builder.AddCompletionQueue();
     // Finally assemble the server.
     std::unique_ptr<Server> server(builder.BuildAndStart());
     std::cout << "Server listening on " << server_address << std::endl;
@@ -149,7 +151,6 @@ void RunServer(int argc, char** argv) {
     server->Wait();
 }
 int main(int argc, char** argv) {
-  //ServerImpl server;
   RunServer(argc,argv);
   return 0;
 }
