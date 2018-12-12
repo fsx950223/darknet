@@ -15,9 +15,9 @@
 syntax = "proto3";
 
 option java_multiple_files = true;
-option java_package = "io.grpc.chenyun.detector";
-option java_outer_classname = "Detector";
-option objc_class_prefix = "chenyun";
+option java_package = "io.grpc.chengyun.detector";
+option java_outer_classname = "DetectorProto";
+option objc_class_prefix = "chengyun";
 
 package detector;
 
