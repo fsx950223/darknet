@@ -361,7 +361,7 @@ void validate_detector_flip(char *datacfg, char *cfgfile, char *weightfile, char
 }
 
 
-void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *outfile)
+void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *outfile,float thresh,float hier_thresh)
 {
     int j;
     list *options = read_data_cfg(datacfg);
@@ -371,6 +371,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
     char **names = get_labels(name_list);
     char *mapf = option_find_str(options, "map", 0);
     int *map = 0;
+    image **alphabet = load_alphabet();
     if (mapf) map = read_map(mapf);
 
     network *net = load_network(cfgfile, weightfile, 0);
@@ -415,8 +416,8 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
     int m = plist->size;
     int i=0;
     int t;
-
-    float thresh = .005;
+    //float thresh = find_float_arg(argc, argv, "-thresh", .5);
+    //float thresh = .25;
     float nms = .45;
 
     int nthreads = 4;
@@ -453,6 +454,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
             thr[t] = load_data_in_thread(args);
         }
         for(t = 0; t < nthreads && i+t-nthreads < m; ++t){
+           
             char *path = paths[i+t-nthreads];
             char *id = basecfg(path);
             float *X = val_resized[t].data;
@@ -460,8 +462,10 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
             int w = val[t].w;
             int h = val[t].h;
             int nboxes = 0;
+            //detection *dets=get_network_boxes(net, w, h, thresh, .5, 0, 1, &nboxes);
             detection *dets = get_network_boxes(net, w, h, thresh, .5, map, 0, &nboxes);
             if (nms) do_nms_sort(dets, nboxes, classes, nms);
+            //draw_detections(val[t], dets, nboxes, thresh, names, alphabet,classes);
             if (coco){
                 print_cocos(fp, path, dets, nboxes, classes, w, h);
             } else if (imagenet){
@@ -470,6 +474,9 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
                 print_detector_detections(fps, id, dets, nboxes, classes, w, h);
             }
             free_detections(dets, nboxes);
+            // char save_path[1024];
+            // snprintf(save_path,1024,"%s/%s","results",id);
+            //save_image(val[t], save_path);
             free(id);
             free_image(val[t]);
             free_image(val_resized[t]);
@@ -915,7 +922,7 @@ void run_detector(int argc, char **argv)
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen);
     else if(0==strcmp(argv[2], "json")) test_detector_json(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
-    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
+    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile,thresh, hier_thresh);
     else if(0==strcmp(argv[2], "valid2")) validate_detector_flip(datacfg, cfg, weights, outfile);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(cfg, weights);
     else if(0==strcmp(argv[2], "demo")) {
