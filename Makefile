@@ -1,6 +1,6 @@
-GPU=0
-CUDNN=0
-OPENCV=0
+GPU=1
+CUDNN=1
+OPENCV=1
 OPENMP=0
 DEBUG=1
 
@@ -19,6 +19,7 @@ ALIB=libdarknet.a
 EXEC=darknet
 OBJDIR=./obj/
 
+SERVER=server
 CC=gcc
 CPP=g++
 NVCC=nvcc 
@@ -27,10 +28,9 @@ ARFLAGS=rcs
 OPTS=-Ofast
 LDFLAGS= -lm -pthread 
 COMMON= -Iinclude/ -Isrc/
-CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
-LDFLAGS += -L/usr/local/lib `pkg-config --libs protobuf grpc++ grpc`\
-           -Wl,--no-as-needed -lgrpc++_reflection -Wl,--as-needed\
-           -ldl
+CFLAGS= -Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
+
+#COMMON+= `pkg-config --cflags protobuf grpc` 
 ifeq ($(OPENMP), 1) 
 CFLAGS+= -fopenmp
 endif
@@ -44,7 +44,7 @@ CFLAGS+=$(OPTS)
 ifeq ($(OPENCV), 1) 
 COMMON+= -DOPENCV
 CFLAGS+= -DOPENCV
-LDFLAGS+= `pkg-config --libs opencv` -lstdc++
+LDFLAGS+= `pkg-config --libs opencv`
 COMMON+= `pkg-config --cflags opencv` 
 endif
 
@@ -67,18 +67,20 @@ LDFLAGS+= -lstdc++
 ifeq ($(GPU), 1) 
 OBJ+=convolutional_kernels.o deconvolutional_kernels.o activation_kernels.o im2col_kernels.o col2im_kernels.o blas_kernels.o crop_layer_kernels.o dropout_layer_kernels.o maxpool_layer_kernels.o avgpool_layer_kernels.o
 endif
-
+LDFLAGS2= -lprotobuf -pthread -lpthread -lgrpc++ -lgrpc -lyaml-cpp\
+           -Wl,--no-as-needed -lgrpc++_reflection -Wl,--as-needed\
+           -ldl
 EXECOBJ = $(addprefix $(OBJDIR), $(EXECOBJA))
 EXECOBJ2 = $(addprefix $(OBJDIR), $(EXECOBJA2))
 OBJS = $(addprefix $(OBJDIR), $(OBJ))
 DEPS = $(wildcard src/*.h) Makefile include/darknet.h proto/detector.grpc.pb.h proto/detector.pb.h
 
-all: obj backup results $(SLIB) $(ALIB) $(EXEC) server
+all: obj backup results $(SLIB) $(ALIB) $(EXEC) $(SERVER)
 
 $(EXEC): $(EXECOBJ) $(ALIB)
 	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB)
-server: $(EXECOBJ2) $(ALIB)
-	$(CPP) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB)
+$(SERVER): $(EXECOBJ2) $(ALIB)
+	$(CPP) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LDFLAGS2) $(ALIB)
 $(ALIB): $(OBJS)
 	$(AR) $(ARFLAGS) $@ $^
 
