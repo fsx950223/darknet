@@ -3,7 +3,7 @@ LABEL maintainer="fangsixie <fsx950223@outlook.com>"
 WORKDIR /darknet
 COPY ["./chenyun","/darknet/chenyun/"]
 COPY ["./darknet","./server","/darknet/"]
-COPY ["./docker/cudnn-10.0-linux-x64-v7.4.1.5.tgz","/"]
+COPY ["./docker/cudnn-10.0-linux-x64-v7.4.1.5.tgz","./third_party/grpc","/"]
 # Pick up some darknet dependencies
 RUN apt-get update && apt-get install -y apt-transport-https && \
     echo 'deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64 /' > /etc/apt/sources.list.d/cuda.list && \
@@ -17,23 +17,18 @@ RUN apt-get update && apt-get install -y apt-transport-https && \
         cuda-cusparse-10-0 \
         cuda-libraries-dev-10-0 \
         cuda-curand-10-0 \
+        libopencv-dev \
         g++ \
-        git \
-        wget \
-        curl \
         && \
     tar -xf cudnn-10.0-linux-x64-v7.4.1.5.tgz && \
     cp -R cuda/include/* /usr/local/cuda-10.0/include && \
     cp -R cuda/lib64/* /usr/local/cuda-10.0/lib64 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    git clone -b $(curl -L https://grpc.io/release) https://github.com/grpc/grpc && \
-    cd grpc && \
-    git submodule update --init && \
     cd /grpc && \
     make && make install && \
     cd ./third_party/protobuf && \
     make install && \
-    cd / && rm -rf Makefile cudnn-10.0-linux-x64-v7.4.1.5.tgz cuda
+    cd / && rm -rf cudnn-10.0-linux-x64-v7.4.1.5.tgz cuda grpc
 EXPOSE 50051
 ENTRYPOINT ["/darknet/server"]
