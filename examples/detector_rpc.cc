@@ -1,7 +1,8 @@
 #include <iostream>
 #include <memory>
-#include <string>
+#include <string.h>
 #include <map>
+#include <string>
 #include <unistd.h>
 #include <grpcpp/grpcpp.h>
 #include <fstream>
@@ -28,7 +29,8 @@ enum class Type { READ, WRITE, CONNECT,DONE, FINISH};
 class ServerImpl{
     public:
         ServerImpl(int argc, char** argv) {
-            load_configs();
+            auto args=ParseArguments(argc,argv);
+            LoadConfig(args.find("config")!=args.end()?args.find("config")->second:nullptr);
             std::ofstream outf(log_); 
             std::cout.rdbuf(outf.rdbuf()); 
             builder_.AddListeningPort(server_address_, grpc::InsecureServerCredentials());
@@ -36,13 +38,13 @@ class ServerImpl{
             // clients. In this case it corresponds to an *asynchronous* service.
             Detector::AsyncService service;
             builder_.RegisterService(&service);
-            for(int i=0;i<10;i++){
+            for(unsigned int i=0;i<10;i++){
                 cqs_.push_back(builder_.AddCompletionQueue());
             }
             // Finally assemble the server.
             server_=builder_.BuildAndStart();
             std::cout << "Server listening on " << server_address_ << std::endl;
-            for(int i=0;i<cqs_.size();i++){
+            for(unsigned int i=0;i<cqs_.size();i++){
                 RegisterServices(&service,cqs_[i].get());
             }
             server_->Wait();
@@ -51,7 +53,7 @@ class ServerImpl{
         ~ServerImpl(){
             std::cout<<"Shutting down server"<<std::endl;
             server_->Shutdown();
-            for(int i=0;i<cqs_.size();i++){
+            for(unsigned int i=0;i<cqs_.size();i++){
                 cqs_[i]->Shutdown();
             }
         }
@@ -59,8 +61,20 @@ class ServerImpl{
         void RegisterServices(Detector::AsyncService* service,ServerCompletionQueue* cq){
             new PredictImage(service,net_,&srv_,names_,cq,cq,METHOD::PREDICT_IMAGE);
         }
-        void load_configs(){
-            YAML::Node config = YAML::LoadFile("chenyun/config.yaml");
+        std::map<char*,char*> ParseArguments(int argc,char** argv){
+            std::map<char*,char*> result;
+            for(int i=1;i<argc;i++){
+                auto k=strtok(argv[i],"=");
+                std::cout<<k<<std::endl;
+                auto v=strtok(NULL,"=");
+                std::cout<<v<<std::endl;
+                result.insert(std::make_pair(k,v));
+            }
+            return result;
+        }
+        void LoadConfig(char* config_path){
+            std::cout<<config_path<<std::endl;
+            YAML::Node config = YAML::LoadFile(config_path!=nullptr?config_path:"chenyun/config.yaml");
             std::string datacfgStr=config["data"].as<std::string>();
             std::string cfgfileStr=config["cfg"].as<std::string>();
             std::string weightfileStr=config["weight"].as<std::string>();
