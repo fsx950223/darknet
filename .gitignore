@@ -24,9 +24,11 @@ darknet
 proto/*.cc
 proto/*.h
 chenyun
+results
 # OS Generated #
 .DS_Store*
 ehthumbs.db
 Icon?
 Thumbs.db
 *.swp
+libdarknet.*
