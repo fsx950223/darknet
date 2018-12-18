@@ -8,16 +8,11 @@ PredictImage::PredictImage(Detector::AsyncService* service,network* net,std::str
     server_cq_=server_cq;
     service_=service;
     method_=method;
-    uuid_t uuid;
-    uuid_generate(uuid);
-    uuid_=&uuid;
-    Tag<Type> *tag=new Tag<Type>(Type::DONE,uuid_);
-    context_.AsyncNotifyWhenDone(static_cast<void*>(tag));
+    context_.AsyncNotifyWhenDone(reinterpret_cast<void*>(Type::DONE));
     switch(method_){
         case PREDICT_IMAGE:{
             stream_.reset(new ServerAsyncReaderWriter<DetectorReply,DetectorRequest>(&context_));
-            Tag<Type> *tag=new Tag<Type>(Type::CONNECT,uuid_);
-            service_->RequestPredict(&context_,stream_.get(),cq_,server_cq_,static_cast<void*>(tag));
+            service_->RequestPredict(&context_,stream_.get(),cq_,server_cq_,reinterpret_cast<void*>(Type::CONNECT));
             grpc_thread_=new std::thread(std::bind(&PredictImage::GrpcThread, this));
             break;
         }
@@ -25,16 +20,16 @@ PredictImage::PredictImage(Detector::AsyncService* service,network* net,std::str
             std::cout<<"No such method"<<std::endl;
     }
 }
-PredictImage::~PredictImage(){}
+PredictImage::~PredictImage(){
+    grpc_thread_->join();
+}
 void PredictImage::ReadAsyncPredict(){
-    Tag<Type> *tag=new Tag<Type>(Type::READ,uuid_);
-    stream_->Read(&request_,static_cast<void*>(tag));
+    stream_->Read(&request_,reinterpret_cast<void*>(Type::READ));
 }
 void PredictImage::WriteAsyncPredict(){
     if(request_.token()!="detector-grpc-token"){
         std::cout << "predict: token error" << std::endl;
-        Tag<Type> *tag=new Tag<Type>(Type::DONE,uuid_);
-        stream_->Finish(Status::CANCELLED,static_cast<void*>(tag));
+        stream_->Finish(Status::CANCELLED,reinterpret_cast<void*>(Type::DONE));
         return;
     }
     predict_detector(request_.file(),request_.thresh(),request_.hier_thresh());
@@ -103,8 +98,7 @@ void PredictImage::detection_json(image im, detection *dets, int num, float thre
             reply.set_top(top);
             reply.set_name(name);
             reply.set_rate(rate);
-            Tag<Type> *tag=new Tag<Type>(Type::WRITE,uuid_);
-            stream_->Write(reply,reinterpret_cast<void*>(tag));
+            stream_->Write(reply,reinterpret_cast<void*>(Type::WRITE));
         }
     }
 }
@@ -119,9 +113,8 @@ void PredictImage::GrpcThread(){
             std::cerr << "RPC stream closed. Quitting" << std::endl;
             break;
         };
-        auto result=static_cast<Tag<Type>*>(tag);
-        if(ok&&(result->uuid_==uuid_)){
-            switch(Type::READ){
+        if(ok){
+            switch(reinterpret_cast<size_t>(tag)){
                 case Type::READ:{
                     WriteAsyncPredict();
                     break;
@@ -133,13 +126,11 @@ void PredictImage::GrpcThread(){
                     break;
                 }
                 case Type::CONNECT:{
-                    new PredictImage(service_,net_,srv_,names_,cq_,server_cq_,method_);
                     ReadAsyncPredict();
                     break;
                 }
                 case Type::DONE:{
                     std::cout << "RPC disconnecting." << std::endl;
-                    grpc_thread_->join();
                     is_running_=false;
                     break;
                 }
@@ -150,7 +141,6 @@ void PredictImage::GrpcThread(){
             }
         }
     }
-    delete this;
 }   
           
 

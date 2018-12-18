@@ -36,21 +36,28 @@ class ServerImpl{
             // clients. In this case it corresponds to an *asynchronous* service.
             Detector::AsyncService service;
             builder_.RegisterService(&service);
+            for(int i=0;i<10;i++){
+                cqs_.push_back(builder_.AddCompletionQueue());
+            }
             // Finally assemble the server.
             server_=builder_.BuildAndStart();
             std::cout << "Server listening on " << server_address_ << std::endl;
-            RegisterServices(&service);
+            for(int i=0;i<cqs_.size();i++){
+                RegisterServices(&service,cqs_[i].get());
+            }
             server_->Wait();
         }
 
         ~ServerImpl(){
             std::cout<<"Shutting down server"<<std::endl;
             server_->Shutdown();
-            cq_->Shutdown();
+            for(int i=0;i<cqs_.size();i++){
+                cqs_[i]->Shutdown();
+            }
         }
     private:
-        void RegisterServices(Detector::AsyncService* service){
-            new PredictImage(service,net_,&srv_,names_,cq_.get(),cq_.get(),METHOD::PREDICT_IMAGE);
+        void RegisterServices(Detector::AsyncService* service,ServerCompletionQueue* cq){
+            new PredictImage(service,net_,&srv_,names_,cq,cq,METHOD::PREDICT_IMAGE);
         }
         void load_configs(){
             YAML::Node config = YAML::LoadFile("chenyun/config.yaml");
@@ -74,7 +81,7 @@ class ServerImpl{
         }
         DetectorRequest request_;
         std::unique_ptr<Server> server_;
-        std::unique_ptr<ServerCompletionQueue> cq_;
+        std::vector<std::unique_ptr<ServerCompletionQueue>> cqs_;
         std::string srv_;
         std::string server_address_;
         std::string log_;
@@ -82,8 +89,6 @@ class ServerImpl{
         network *net_=nullptr;
         char **names_=nullptr;
 };
-
-
 
 int main(int argc, char** argv) {
     ServerImpl server(argc,argv);
