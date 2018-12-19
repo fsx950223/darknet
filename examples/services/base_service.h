@@ -12,7 +12,6 @@ class BaseService{
         ServerCompletionQueue* server_cq_=nullptr;
         ServerContext context_;
         bool is_busy_=false;
-        bool is_running_=true;
         enum Type { READ=1, WRITE=2, CONNECT=3,DONE=4, FINISH=5 };
         std::thread* grpc_thread_=nullptr;
         T method_;

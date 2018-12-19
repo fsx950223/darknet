@@ -1,6 +1,6 @@
 #include "./predict_image.h"
 
-PredictImage::PredictImage(Detector::AsyncService* service,network* net,std::string* srv,char** names,CompletionQueue* cq,ServerCompletionQueue* server_cq,METHOD method){
+PredictImage::PredictImage(Detector::AsyncService* service,network* net,std::string* srv,char** names,CompletionQueue* cq,ServerCompletionQueue* server_cq,METHOD method,std::queue<PredictImage*>* gpu_queue){
     net_=net;
     srv_=srv;
     names_=names;
@@ -8,6 +8,7 @@ PredictImage::PredictImage(Detector::AsyncService* service,network* net,std::str
     server_cq_=server_cq;
     service_=service;
     method_=method;
+    gpu_queue_=gpu_queue;
     context_.AsyncNotifyWhenDone(reinterpret_cast<void*>(Type::DONE));
     switch(method_){
         case PREDICT_IMAGE:{
@@ -32,7 +33,7 @@ void PredictImage::WriteAsyncPredict(){
         stream_->Finish(Status::CANCELLED,reinterpret_cast<void*>(Type::DONE));
         return;
     }
-    predict_detector(request_.file(),request_.thresh(),request_.hier_thresh());
+    gpu_queue_->push(this);
 }
 void PredictImage::predict_detector(std::string file, float thresh=0.25, float hier_thresh=0.5){
     srand(2222222);
@@ -53,6 +54,7 @@ void PredictImage::predict_detector(std::string file, float thresh=0.25, float h
     detection *dets = get_network_boxes(net_, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
     if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
     detection_json(im, dets, nboxes, thresh, names_, l.classes);
+    delete input;
     free_detections(dets, nboxes);
     free_image(im);
     free_image(sized);
@@ -103,18 +105,20 @@ void PredictImage::detection_json(image im, detection *dets, int num, float thre
     }
 }
 void PredictImage::GrpcThread(){
-    while(is_running_){
-        if(is_busy_){
+    while(true){
+        if(is_busy_||gpu_busy_){
             continue;
         }
+  
         void* tag=nullptr;
         bool ok=false;
         if(!cq_->Next(&tag,&ok)){
             std::cerr << "RPC stream closed. Quitting" << std::endl;
             break;
         };
+        
         if(ok){
-            switch(reinterpret_cast<size_t>(tag)){
+            switch(static_cast<Type>(reinterpret_cast<size_t>(tag))){
                 case Type::READ:{
                     WriteAsyncPredict();
                     break;
@@ -131,7 +135,6 @@ void PredictImage::GrpcThread(){
                 }
                 case Type::DONE:{
                     std::cout << "RPC disconnecting." << std::endl;
-                    is_running_=false;
                     break;
                 }
                 default:{

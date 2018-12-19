@@ -2,6 +2,7 @@
 #include <memory>
 #include <string.h>
 #include <map>
+#include <queue>
 #include <string>
 #include <unistd.h>
 #include <grpcpp/grpcpp.h>
@@ -29,6 +30,9 @@ enum class Type { READ, WRITE, CONNECT,DONE, FINISH};
 class ServerImpl{
     public:
         ServerImpl(int argc, char** argv) {
+            // #ifdef GPU 
+            //     printf("%f",get_gpu_percentage());
+            // #endif
             auto args=ParseArguments(argc,argv);
             LoadConfig(args.find("config")!=args.end()?args.find("config")->second:nullptr);
             std::ofstream outf(log_); 
@@ -39,7 +43,7 @@ class ServerImpl{
             Detector::AsyncService service;
             builder_.RegisterService(&service);
             for(unsigned int i=0;i<10;i++){
-                cqs_.push_back(builder_.AddCompletionQueue());
+                cqs_.push_back(std::move(builder_.AddCompletionQueue()));
             }
             // Finally assemble the server.
             server_=builder_.BuildAndStart();
@@ -47,6 +51,7 @@ class ServerImpl{
             for(unsigned int i=0;i<cqs_.size();i++){
                 RegisterServices(&service,cqs_[i].get());
             }
+            t_.reset(new std::thread(std::bind(&ServerImpl::predict_thread, this)));
             server_->Wait();
         }
 
@@ -56,10 +61,22 @@ class ServerImpl{
             for(unsigned int i=0;i<cqs_.size();i++){
                 cqs_[i]->Shutdown();
             }
+            t_->join();
+        }
+        void predict_thread(){
+            while(true){
+                if(!gpu_queue_.empty()){
+                    auto instance=gpu_queue_.front();
+                    if(instance!=nullptr){
+                        instance->predict_detector(instance->request_.file(),instance->request_.thresh(),instance->request_.hier_thresh());
+                    }
+                    gpu_queue_.pop();
+                }
+            }
         }
     private:
         void RegisterServices(Detector::AsyncService* service,ServerCompletionQueue* cq){
-            new PredictImage(service,net_,&srv_,names_,cq,cq,METHOD::PREDICT_IMAGE);
+            new PredictImage(service,net_,&srv_,names_,cq,cq,METHOD::PREDICT_IMAGE,&gpu_queue_);
         }
         std::map<char*,char*> ParseArguments(int argc,char** argv){
             std::map<char*,char*> result;
@@ -92,16 +109,20 @@ class ServerImpl{
             names_ = get_labels(name_list);
             net_ = load_network(cfgfile, weightfile, 0);
             set_batch_network(net_, 1);
+            delete datacfg;
+            delete cfgfile;
+            delete weightfile;
         }
-        DetectorRequest request_;
         std::unique_ptr<Server> server_;
         std::vector<std::unique_ptr<ServerCompletionQueue>> cqs_;
         std::string srv_;
         std::string server_address_;
         std::string log_;
         ServerBuilder builder_;
+        std::queue<PredictImage*> gpu_queue_;
         network *net_=nullptr;
         char **names_=nullptr;
+        std::unique_ptr<std::thread> t_;
 };
 
 int main(int argc, char** argv) {
