@@ -10,7 +10,7 @@ void train_yolo(char *cfgfile, char *weightfile)
     char *base = basecfg(cfgfile);
     printf("%s\n", base);
     float avg_loss = -1;
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
     int imgs = net->batch*net->subdivisions;
     int i = *net->seen/imgs;
@@ -97,7 +97,7 @@ void print_yolo_detections(FILE **fps, char *id, int total, int classes, int w, 
 
 void validate_yolo(char *cfg, char *weights)
 {
-    network *net = load_network(cfg, weights, 0);
+    network *net = load_network(cfg, weights, 0,0);
     set_batch_network(net, 1);
     fprintf(stderr, "Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
     srand(time(0));
@@ -181,7 +181,7 @@ void validate_yolo(char *cfg, char *weights)
 
 void validate_yolo_recall(char *cfg, char *weights)
 {
-    network *net = load_network(cfg, weights, 0);
+    network *net = load_network(cfg, weights, 0,0);
     set_batch_network(net, 1);
     fprintf(stderr, "Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
     srand(time(0));
@@ -265,7 +265,7 @@ void validate_yolo_recall(char *cfg, char *weights)
 void test_yolo(char *cfgfile, char *weightfile, char *filename, float thresh)
 {
     image **alphabet = load_alphabet();
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     layer l = net->layers[net->n-1];
     set_batch_network(net, 1);
     srand(2222222);

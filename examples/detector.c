@@ -20,10 +20,10 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     int i;
     for(i = 0; i < ngpus; ++i){
         srand(seed);
-#ifdef GPU
-        cuda_set_device(gpus[i]);
-#endif
-        nets[i] = load_network(cfgfile, weightfile, clear);
+// #ifdef GPU
+//         cuda_set_device(gpus[i]);
+// #endif
+        nets[i] = load_network(cfgfile, weightfile, clear,gpus[i]);
         nets[i]->learning_rate *= ngpus;
     }
     srand(time(0));
@@ -243,7 +243,7 @@ void validate_detector_flip(char *datacfg, char *cfgfile, char *weightfile, char
     int *map = 0;
     if (mapf) map = read_map(mapf);
 
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     set_batch_network(net, 2);
     fprintf(stderr, "Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
     srand(time(0));
@@ -365,16 +365,16 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 {
     int j;
     list *options = read_data_cfg(datacfg);
-    char *valid_images = option_find_str(options, "valid", "data/train.list");
+    char *valid_images = option_find_str(options, "valid", "data/test.list");
     char *name_list = option_find_str(options, "names", "data/names.list");
     char *prefix = option_find_str(options, "results", "results");
     char **names = get_labels(name_list);
     char *mapf = option_find_str(options, "map", 0);
     int *map = 0;
-    image **alphabet = load_alphabet();
+    //image **alphabet = load_alphabet();
     if (mapf) map = read_map(mapf);
 
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     set_batch_network(net, 1);
     fprintf(stderr, "Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
     srand(time(0));
@@ -495,7 +495,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 
 void validate_detector_recall(char *datafile,char *cfgfile, char *weightfile)
 {
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     set_batch_network(net, 1);
     fprintf(stderr, "Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
     srand(time(0));
@@ -575,7 +575,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     char **names = get_labels(name_list);
 
     image **alphabet = load_alphabet();
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     set_batch_network(net, 1);
     srand(2222222);
     double time;
@@ -672,7 +672,7 @@ void test_detector_json(char *datacfg, char *cfgfile, char *weightfile, char *fi
     list *options = read_data_cfg(datacfg);
     char *name_list = option_find_str(options, "names", "data/names.list");
     char **names = get_labels(name_list);
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     set_batch_network(net, 1);
     srand(2222222);
     double time;
@@ -905,7 +905,7 @@ void run_detector(int argc, char **argv)
             gpu_list = strchr(gpu_list, ',')+1;
         }
     } else {
-        gpu = gpu_index;
+        //gpu = gpu_index;
         gpus = &gpu;
         ngpus = 1;
     }

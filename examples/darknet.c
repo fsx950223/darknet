@@ -25,9 +25,9 @@ void average(int argc, char *argv[])
 {
     char *cfgfile = argv[2];
     char *outfile = argv[3];
-    gpu_index = -1;
-    network *net = parse_network_cfg(cfgfile);
-    network *sum = parse_network_cfg(cfgfile);
+    //gpu_index = -1;
+    network *net = parse_network_cfg(cfgfile,-1);
+    network *sum = parse_network_cfg(cfgfile,-1);
 
     char *weightfile = argv[4];   
     load_weights(sum, weightfile);
@@ -115,7 +115,7 @@ long numops(network *net)
 void speed(char *cfgfile, int tics)
 {
     if (tics == 0) tics = 1000;
-    network *net = parse_network_cfg(cfgfile);
+    network *net = parse_network_cfg(cfgfile,0);
     set_batch_network(net, 1);
     int i;
     double time=what_time_is_it_now();
@@ -134,8 +134,8 @@ void speed(char *cfgfile, int tics)
 
 void operations(char *cfgfile)
 {
-    gpu_index = -1;
-    network *net = parse_network_cfg(cfgfile);
+    //gpu_index = -1;
+    network *net = parse_network_cfg(cfgfile,-1);
     long ops = numops(net);
     printf("Floating Point Operations: %ld\n", ops);
     printf("Floating Point Operations: %.2f Bn\n", (float)ops/1000000000.);
@@ -143,8 +143,8 @@ void operations(char *cfgfile)
 
 void oneoff(char *cfgfile, char *weightfile, char *outfile)
 {
-    gpu_index = -1;
-    network *net = parse_network_cfg(cfgfile);
+    //gpu_index = -1;
+    network *net = parse_network_cfg(cfgfile,-1);
     int oldn = net->layers[net->n - 2].n;
     int c = net->layers[net->n - 2].c;
     scal_cpu(oldn*c, .1, net->layers[net->n - 2].weights, 1);
@@ -170,8 +170,8 @@ void oneoff(char *cfgfile, char *weightfile, char *outfile)
 
 void oneoff2(char *cfgfile, char *weightfile, char *outfile, int l)
 {
-    gpu_index = -1;
-    network *net = parse_network_cfg(cfgfile);
+    //gpu_index = -1;
+    network *net = parse_network_cfg(cfgfile,-1);
     if(weightfile){
         load_weights_upto(net, weightfile, 0, net->n);
         load_weights_upto(net, weightfile, l, net->n);
@@ -182,15 +182,15 @@ void oneoff2(char *cfgfile, char *weightfile, char *outfile, int l)
 
 void partial(char *cfgfile, char *weightfile, char *outfile, int max)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 1);
+    //gpu_index = -1;
+    network *net = load_network(cfgfile, weightfile, 1,-1);
     save_weights_upto(net, outfile, max);
 }
 
 void print_weights(char *cfgfile, char *weightfile, int n)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 1);
+    //gpu_index = -1;
+    network *net = load_network(cfgfile, weightfile, 1,-1);
     layer l = net->layers[n];
     int i, j;
     //printf("[");
@@ -208,8 +208,8 @@ void print_weights(char *cfgfile, char *weightfile, int n)
 
 void rescale_net(char *cfgfile, char *weightfile, char *outfile)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 0);
+    //gpu_index = -1;
+    network *net = load_network(cfgfile, weightfile, 0,-1);
     int i;
     for(i = 0; i < net->n; ++i){
         layer l = net->layers[i];
@@ -223,8 +223,8 @@ void rescale_net(char *cfgfile, char *weightfile, char *outfile)
 
 void rgbgr_net(char *cfgfile, char *weightfile, char *outfile)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 0);
+    //gpu_index = -1;
+    network *net = load_network(cfgfile, weightfile, 0,-1);
     int i;
     for(i = 0; i < net->n; ++i){
         layer l = net->layers[i];
@@ -238,8 +238,8 @@ void rgbgr_net(char *cfgfile, char *weightfile, char *outfile)
 
 void reset_normalize_net(char *cfgfile, char *weightfile, char *outfile)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 0);
+    //gpu_index = -1;
+    network *net = load_network(cfgfile, weightfile, 0,-1);
     int i;
     for (i = 0; i < net->n; ++i) {
         layer l = net->layers[i];
@@ -276,8 +276,8 @@ layer normalize_layer(layer l, int n)
 
 void normalize_net(char *cfgfile, char *weightfile, char *outfile)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 0);
+    //gpu_index = ;
+    network *net = load_network(cfgfile, weightfile, 0,-1);
     int i;
     for(i = 0; i < net->n; ++i){
         layer l = net->layers[i];
@@ -302,8 +302,8 @@ void normalize_net(char *cfgfile, char *weightfile, char *outfile)
 
 void statistics_net(char *cfgfile, char *weightfile)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 0);
+    //gpu_index = -1;
+    network *net = load_network(cfgfile, weightfile, 0,-1);
     int i;
     for (i = 0; i < net->n; ++i) {
         layer l = net->layers[i];
@@ -332,8 +332,8 @@ void statistics_net(char *cfgfile, char *weightfile)
 
 void denormalize_net(char *cfgfile, char *weightfile, char *outfile)
 {
-    gpu_index = -1;
-    network *net = load_network(cfgfile, weightfile, 0);
+    //gpu_index = -1;
+    network *net = load_network(cfgfile, weightfile, 0,-1);
     int i;
     for (i = 0; i < net->n; ++i) {
         layer l = net->layers[i];
@@ -366,7 +366,7 @@ void denormalize_net(char *cfgfile, char *weightfile, char *outfile)
 
 void mkimg(char *cfgfile, char *weightfile, int h, int w, int num, char *prefix)
 {
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     image *ims = get_weights(net->layers[0]);
     int n = net->layers[0].n;
     int z;
@@ -392,7 +392,7 @@ void mkimg(char *cfgfile, char *weightfile, int h, int w, int num, char *prefix)
 
 void visualize(char *cfgfile, char *weightfile)
 {
-    network *net = load_network(cfgfile, weightfile, 0);
+    network *net = load_network(cfgfile, weightfile, 0,0);
     visualize_network(net);
 }
 
@@ -405,7 +405,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <function>\n", argv[0]);
         return 0;
     }
-    gpu_index = find_int_arg(argc, argv, "-i", 0);
+    int gpu_index = find_int_arg(argc, argv, "-i", 0);
     if(find_arg(argc, argv, "-nogpu")) {
         gpu_index = -1;
     }
